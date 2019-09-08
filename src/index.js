@@ -24,7 +24,7 @@ const {
   MidNumLetQ
 } = require('./classes');
 
-const classTrie = new UnicodeTrie(fs.readFileSync(__dirname + '/classes.trie',));
+const classTrie = new UnicodeTrie(fs.readFileSync(__dirname + '/classes.trie'));
 
 // table 3a
 function mapClass(c) {
@@ -46,9 +46,8 @@ class WordBreaker {
   constructor(string) {
     this.string = string;
     this.pos = 0;
-    this.lastPos = 0;
-    this.curClass = null;
     this.nextClass = null;
+    this.riCount = 0;
   }
 
   nextCodePoint() {
@@ -65,20 +64,29 @@ class WordBreaker {
   }
 
   nextCharClass() {
-    return mapClass(classTrie.get(this.nextCodePoint()));
+    return classTrie.get(this.nextCodePoint());
   }
 
   nextBreak() {
     while (this.pos < this.string.length) {
+      let lastClass, curClass, nextClass;
+
       this.lastPos = this.pos;
       this.curClass = this.nextClass;
+      if (!this.inSeq) {
+        this.last4Class = this.cur4Class;
+        this.cur4Class = this.nextClass;
+      }
       this.nextClass = this.nextCharClass();
+
+      this.inSeq = false;
 
       if (this.curClass == null) {
         return 0; // WB1
       }
 
-      const {curClass, nextClass} = this;
+      curClass = this.curClass;
+      nextClass = this.nextClass;
 
       // WB3
       if (curClass === CR && nextClass === LF) continue;
@@ -95,18 +103,82 @@ class WordBreaker {
       // WB3d
       if (curClass === WSegSpace && nextClass === WSegSpace) continue;
 
-      // ---------
-      // TODO 4 
-      // ---------
+      // WB4
+      if (nextClass === Extend || nextClass === Format || nextClass === ZWJ) {
+        this.inSeq = true;
+        continue;
+      }
+
+      lastClass = this.last4Class;
+      curClass = this.cur4Class;
+
+      const mcurClass = mapClass(curClass);
+      const mnextClass = mapClass(nextClass);
 
       // WB5
-      if (curClass === AHLetter && nextClass === AHLetter) continue;
+      if (mcurClass === AHLetter && mnextClass === AHLetter) continue;
 
-      // ---------
-      // TODO 6-16
-      // ---------
+      let peekNext;
+      const restorePos = this.pos;
+      do peekNext = this.nextCharClass();
+      while (peekNext === Extend || peekNext === Format || peekNext === ZWJ);
+      this.pos = restorePos;
 
-      return this.lastPos; // WB999
+      const mpeekNext = mapClass(peekNext);
+      const mlastClass = mapClass(lastClass);
+
+      if (curClass === Regional_Indicator) {
+        this.riCount += 1;
+      } else {
+        this.riCount = 0;
+      }
+
+      // WB6
+      if (mcurClass === AHLetter && (nextClass === MidLetter || mnextClass === MidNumLetQ) && mpeekNext === AHLetter) continue;
+      
+      // WB7
+      if (mlastClass === AHLetter && (curClass === MidLetter || mcurClass === MidNumLetQ) && mnextClass === AHLetter) continue;
+
+      // WB7a
+      if (curClass === Hebrew_Letter && nextClass === Single_Quote) continue;
+
+      // WB7b
+      if (curClass === Hebrew_Letter && nextClass === Double_Quote && peekNext === Hebrew_Letter) continue;
+
+      // WB7c
+      if (lastClass === Hebrew_Letter && curClass === Double_Quote && nextClass === Hebrew_Letter) continue;
+
+      // WB8
+      if (curClass === Numeric && nextClass === Numeric) continue;
+
+      // WB9
+      if (mcurClass === AHLetter && nextClass === Numeric) continue;
+
+      // WB10
+      if (curClass === Numeric && mnextClass === AHLetter) continue;
+
+      // WB11
+      if (lastClass === Numeric && (curClass === MidNum || mcurClass === MidNumLetQ) && nextClass === Numeric) continue;
+
+      // WB12
+      if (curClass === Numeric && (nextClass === MidNum || mnextClass === MidNumLetQ) && peekNext === Numeric) continue;
+
+      // WB13
+      if (curClass === Katakana && nextClass === Katakana) continue;
+
+      // WB13a
+      if ((mcurClass === AHLetter || curClass ===  Numeric || curClass === Katakana || curClass === ExtendNumLet) && nextClass === ExtendNumLet) continue;
+
+      // WB13b
+      if (curClass === ExtendNumLet && (mnextClass === AHLetter || nextClass === Numeric || nextClass === Katakana)) continue;
+
+      // WB15, WB16
+      if (curClass === Regional_Indicator && nextClass === Regional_Indicator) {
+        if (this.riCount % 2 === 1) continue;
+      }
+
+      // WB999
+      return this.lastPos;
     }
 
     if (this.pos && !this.end) {
