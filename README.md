@@ -7,7 +7,7 @@ What are word boundaries used for?
 * CSS's text-transform: uppercase
 * Can be used for search algorithms too
 
-It will keep together grapheme clusters, like emojis with skin tones or diacritical marks like an accent grave. It passes all 613 tests from the [Unicode auxillary files](https://www.unicode.org/Public/UCD/latest/ucd/auxiliary/WordBreakTest.html#samples) for word breaks.
+It will keep together grapheme clusters, like emojis with skin tones or diacritical marks like a grave accent. It passes all 613 tests from the [Unicode auxillary files](https://www.unicode.org/Public/UCD/latest/ucd/auxiliary/WordBreakTest.html#samples) for word breaks.
 
 ## API
 
